@@ -72,5 +72,6 @@
       section = x: x;
     };
     modules = [ standardPageView ];
+    name = "kirigami";
   };
 }
