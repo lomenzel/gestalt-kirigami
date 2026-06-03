@@ -1,10 +1,17 @@
 {
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-      inputs.nixFork.url = "github:lomenzel/nix";
+  inputs.nixFork.url = "github:lomenzel/nix";
 
   outputs =
     { self, nixpkgs, ... }@inputs:
     {
+      overlays.default = final: prev: {
+        gestaltPlatform = prev.gestaltPlatform or {} // {
+          targets = (prev.gestaltPlatform.targets or { }) // {
+            kirigami = final.gestaltPlatform.makeTarget (import ./. { inherit self; });
+          };
+        };
+      };
       devShells = nixpkgs.lib.genAttrs nixpkgs.lib.systems.flakeExposed (
         system:
         let
