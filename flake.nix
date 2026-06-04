@@ -41,12 +41,11 @@
         { pkgs, system }:
         {
           default = pkgs.gestaltPlatform.buildApplication {
-            # having counter as input seems to cause circular dependency problems
             src = "${
               pkgs.fetchgit {
-                url = "https://rad-node.menzel.lol/rad:zWwaJKS7H5FDQPQH8rk7s://rad-node.menzel.lol/rad:zWwaJKS7H5FDQPQH8rk7Qhw4W2KDQhw4W2KD";
+                url = "https://rad-node.menzel.lol/rad:zWwaJKS7H5FDQPQH8rk7Qhw4W2KD";
                 rev = "1dd97579262f566504c8899ad60cadf3316198a9";
-                hash = "";
+                hash = "sha256-ekuvsivDoC6seZK+64o+PTAiJIV13VHhpiR6qwE8tTE=";
               }
             }/src";
             target = pkgs.gestaltPlatform.targets.kirigami;
