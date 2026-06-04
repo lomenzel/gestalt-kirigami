@@ -26,7 +26,7 @@
     in
     {
       overlays.default = final: prev: {
-        gestaltPlatform = prev.gestaltPlatform or { } // {
+        gestaltPlatform = (prev.gestaltPlatform or { }) // {
           targets = (prev.gestaltPlatform.targets or { }) // {
             kirigami = final.gestaltPlatform.makeTarget (import ./. { inherit self; });
           };
@@ -35,7 +35,7 @@
       packages = eachSystem (
         { pkgs, system }:
         {
-         default = pkgs.gestaltPlatform.buildApplication {
+          default = pkgs.gestaltPlatform.buildApplication {
             src = "${inputs.counter}/src";
             target = pkgs.gestaltPlatform.targets.kirigami;
           };
