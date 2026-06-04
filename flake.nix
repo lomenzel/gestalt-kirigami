@@ -2,11 +2,16 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     nixFork.url = "github:lomenzel/nix";
-    counter.url = "git+https://rad-node.menzel.lol/rad:zWwaJKS7H5FDQPQH8rk7Qhw4W2KD";
+    core.url = "git+https://rad-node.menzel.lol/rad:zC4kuEr7XGt6qAcTt5JtJ7pCxZE8";
   };
 
   outputs =
-    { self, nixpkgs, ... }@inputs:
+    {
+      self,
+      nixpkgs,
+      core,
+      ...
+    }@inputs:
     let
       eachSystem =
         f:
@@ -18,7 +23,7 @@
               inherit system;
               overlays = [
                 self.overlays.default
-                inputs.counter.inputs.gestalt.inputs.core.overlays.default
+                core.overlays.default
               ];
             };
           }
@@ -36,7 +41,14 @@
         { pkgs, system }:
         {
           default = pkgs.gestaltPlatform.buildApplication {
-            src = "${inputs.counter}/src";
+            # having counter as input seems to cause circular dependency problems
+            src = "${
+              pkgs.fetchgit {
+                url = "https://rad-node.menzel.lol/rad:zWwaJKS7H5FDQPQH8rk7s://rad-node.menzel.lol/rad:zWwaJKS7H5FDQPQH8rk7Qhw4W2KDQhw4W2KD";
+                rev = "1dd97579262f566504c8899ad60cadf3316198a9";
+                hash = "";
+              }
+            }/src";
             target = pkgs.gestaltPlatform.targets.kirigami;
           };
         }
