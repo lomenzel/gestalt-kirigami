@@ -1,17 +1,46 @@
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-  inputs.nixFork.url = "github:lomenzel/nix";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixFork.url = "github:lomenzel/nix";
+    counter.url = "git+https://rad-node.menzel.lol/rad:zWwaJKS7H5FDQPQH8rk7Qhw4W2KD";
+  };
 
   outputs =
     { self, nixpkgs, ... }@inputs:
+    let
+      eachSystem =
+        f:
+        nixpkgs.lib.genAttrs nixpkgs.lib.systems.flakeExposed (
+          system:
+          f {
+            inherit system;
+            pkgs = import nixpkgs {
+              inherit system;
+              overlays = [
+                self.overlays.default
+                inputs.counter.inputs.gestalt.inputs.core.overlays.default
+              ];
+            };
+          }
+        );
+    in
     {
       overlays.default = final: prev: {
-        gestaltPlatform = prev.gestaltPlatform or {} // {
+        gestaltPlatform = prev.gestaltPlatform or { } // {
           targets = (prev.gestaltPlatform.targets or { }) // {
             kirigami = final.gestaltPlatform.makeTarget (import ./. { inherit self; });
           };
         };
       };
+      packages = eachSystem (
+        { pkgs, system }:
+        {
+         default = pkgs.gestaltPlatform.buildApplication {
+            src = "${inputs.counter}/src";
+            target = pkgs.gestaltPlatform.targets.kirigami;
+          };
+        }
+      );
       devShells = nixpkgs.lib.genAttrs nixpkgs.lib.systems.flakeExposed (
         system:
         let
@@ -20,9 +49,6 @@
         {
           default = pkgs.mkShell {
             buildInputs = [
-              inputs.nixFork.packages.${system}.nix
-              pkgs.nodejs
-              pkgs.nixd
               pkgs.lldb
               (pkgs.writeShellScriptBin "clangd" ''
                 #!/bin/sh
