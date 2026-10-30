@@ -1,174 +1,89 @@
-{self, ...}:
 {
   lib,
   pkgs,
-  defaultCapabilities,
-  standardPageView,
+  self,
   ...
 }:
-{
+let
+  # 1. Cross-compiled Veilid Bridge
+  veilidBridge = pkgs.callPackage ./pkgs/veilid-bridge { };
 
+  # 2. Runtime: Builds with the cross-compiler automatically when in pkgsCross
+  kirigamiRuntime = pkgs.stdenv.mkDerivation {
+    pname = "gestalt-kirigami-runtime";
+    version = "0.1.0";
+    src = ./runtime;
+
+    patchPhase = ''
+      mkdir -p include
+      cp ${pkgs.writeText "wechselbalg.hpp" (pkgs.lib.cppRuntime or lib.cppRuntime)} include/wechselbalg.hpp
+    '';
+
+    nativeBuildInputs = [
+      pkgs.cmake
+      pkgs.ninja
+      pkgs.kdePackages.extra-cmake-modules
+      pkgs.qt6.wrapQtAppsHook
+    ];
+
+    buildInputs = [
+      veilidBridge
+      pkgs.qt6.qtbase
+      pkgs.qt6.qtdeclarative
+      pkgs.kdePackages.kirigami
+      pkgs.wasmtime.dev
+    ];
+  };
+in
+{
   input = self;
+  name = "kirigami";
+
   buildApplication =
     ir:
     let
-      appLib =
-        (lib.mkCppLibrary {
-          value = ir;
-          namespace = "app";
-        }).mkDerivation
-          pkgs;
+      meta = ir.meta or (throw "kirigami target: ir.meta is required");
+      pname = meta.name or (throw "kirigami target: ir.meta.name is required");
+      version = meta.version or "0.1.0";
+
+      # Wechselbalg builds the app IR with target toolchain
+      appLib = (lib.mkCppLibrary {
+        value = ir;
+        namespace = "GestaltApp";
+      }).mkDerivation pkgs;
     in
-    pkgs.stdenv.mkDerivation (finalAttrs: {
-      pname = ir.meta.name;
-      version = ir.meta.version;
-      src = ./.;
-      nativeBuildInputs = with pkgs; [
-        kdePackages.wrapQtAppsHook
-        kdePackages.extra-cmake-modules
+    pkgs.stdenv.mkDerivation {
+      inherit pname version;
+      dontUnpack = true;
+
+      nativeBuildInputs = [
+        pkgs.qt6.wrapQtAppsHook
       ];
+
       buildInputs = [
+        kirigamiRuntime
         appLib
-      ]
-      ++ (
-        with pkgs;
-        with kdePackages;
-        [
-          qtdeclarative
-          cmake
-          kirigami
-          ninja
-          kcoreaddons
-        ]
-      );
-      APP_TITLE = ir.meta.title;
-      APP_NAME = ir.meta.name;
-      APP_LIB_PATH = "${appLib}";
-      passthru =
-        let
-          sizes = {
-            desktop = "1280x720";
-            tablet = "768x1024";
-            mobile = "360x720";
-          };
-          modes = [
-            "light"
-            "dark"
-          ];
-          qtStyles = [
-            "Material"
-            "Fusion"
-            "FluentWinUI3"
-            "Universal"
-          ];
+        veilidBridge
+        pkgs.qt6.qtbase
+        pkgs.qt6.qtdeclarative
+        pkgs.kdePackages.kirigami
+        pkgs.wasmtime
+      ];
 
-          makeScreenshot =
-            sizeName: geom: modeName: styleName:
-            pkgs.runCommand "${ir.meta.name}-screenshot-${sizeName}-${modeName}-${styleName}"
-              {
-                nativeBuildInputs = [
-                  pkgs.xvfb-run
-                  pkgs.imagemagick
-                ];
-              }
-              ''
-                mkdir -p $out
-                export HOME=$TMPDIR
+      installPhase = ''
+        mkdir -p $out/bin
 
-                export QT_QPA_PLATFORM=xcb
-                export QT_QUICK_BACKEND=software
+        appArchive=$(find ${appLib}/lib -maxdepth 1 -name "*.a" | head -n 1)
 
-                export QT_QPA_PLATFORMTHEME=kde
-
-                export QT_PLUGIN_PATH="${pkgs.kdePackages.plasma-integration}/${pkgs.qt6.qtbase.qtPluginPrefix}:''${QT_PLUGIN_PATH:-}"
-
-                mkdir -p "$HOME/.config"
-                export QT_QUICK_CONTROLS_STYLE="${styleName}"
-
-                if [ "${modeName}" = "dark" ]; then
-                  cp "${pkgs.kdePackages.breeze}/share/color-schemes/BreezeDark.colors" "$HOME/.config/kdeglobals"
-                  
-                  export QT_QUICK_CONTROLS_MATERIAL_THEME=Dark
-                  export QT_QUICK_CONTROLS_UNIVERSAL_THEME=Dark
-                else
-                  cp "${pkgs.kdePackages.breeze}/share/color-schemes/BreezeLight.colors" "$HOME/.config/kdeglobals"
-                  export QT_QUICK_CONTROLS_MATERIAL_THEME=Light
-                  export QT_QUICK_CONTROLS_UNIVERSAL_THEME=Light
-                fi
-
-                xvfb-run --server-args="-screen 0 ${geom}x24" sh -c '
-                  "${finalAttrs.finalPackage}/bin/${ir.meta.name}" -qwindowgeometry ${geom} &
-                  APP_PID=$!
-                  
-                  sleep 3
-                  import -window root "$out/screenshot.png"
-                  
-                  kill "$APP_PID"
-                '
-              '';
-          screenshots = lib.mapAttrs (
-            sizeName: geom:
-            lib.genAttrs modes (
-              modeName: lib.genAttrs qtStyles (styleName: makeScreenshot sizeName geom modeName styleName)
-            )
-          ) sizes;
-
-          allScreenshots = pkgs.runCommand "${ir.meta.name}-screenshots-all" { } ''
-            mkdir -p $out
-            ${lib.concatStringsSep "\n" (
-              lib.flatten (
-                lib.mapAttrsToList (
-                  sizeName: modesSet:
-                  lib.mapAttrsToList (
-                    modeName: stylesSet:
-                    lib.mapAttrsToList (
-                      styleName: drv: "ln -s ${drv}/screenshot.png $out/${sizeName}_${modeName}_${styleName}.png"
-                    ) stylesSet
-                  ) modesSet
-                ) screenshots
-              )
-            )}
-          '';
-        in
-        {
-          screenshot = allScreenshots // screenshots;
-        };
-    });
-  effects = defaultCapabilities.Effects;
-  components = {
-    displayValue =
-      {
-        label,
-        tooltip ? "",
-        value,
-        ...
-      }:
-      {
-        _type = "displayValue";
-        inherit label tooltip value;
-      };
-    action =
-      {
-        name,
-        tooltip ? "",
-        onClick,
-        ...
-      }:
-      {
-        _type = "action";
-        inherit name tooltip onClick;
-      };
-    actionGroup =
-      { actions, ... }:
-      {
-        _type = "actionGroup";
-        # Hand-rolled to avoid pulling lib.mapAttrsToList (and transitively
-        # all of lib) into the reified IR.
-        actions = map (id: actions.${id} // { inherit id; }) (builtins.attrNames actions);
-      };
-    section = x: x;
-  };
-  modules = [ standardPageView ];
-  name = "kirigami";
-
+        # $CXX is the target cross-compiler (e.g., armv7l-unknown-linux-gnueabihf-g++)
+        $CXX -O2 -std=c++20 \
+          ${kirigamiRuntime}/share/gestalt/main.cpp \
+          -I${kirigamiRuntime}/include/gestalt \
+          -Wl,--start-group "$appArchive" -Wl,--end-group \
+          -L${kirigamiRuntime}/lib -lgestalt_kirigami_runtime \
+          -L${veilidBridge}/lib -lgestalt_veilid_bridge \
+          -Wl,-rpath,${kirigamiRuntime}/lib \
+          -o $out/bin/${pname}
+      '';
+    };
 }
