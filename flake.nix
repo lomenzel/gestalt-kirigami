@@ -43,5 +43,17 @@
           };
         };
       };
+
+      checks = eachSystem (
+        { pkgs, ... }:
+        pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          link-toolchain = import ./tests/link-toolchain.nix { inherit pkgs; };
+        }
+        // pkgs.lib.optionalAttrs (pkgs.stdenv.buildPlatform.system == "x86_64-linux") {
+          link-toolchain-aarch64 = import ./tests/link-toolchain.nix {
+            pkgs = pkgs.pkgsCross.aarch64-multiplatform;
+          };
+        }
+      );
     };
 }
